@@ -12,7 +12,8 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.autograd import Variable
-os.environ["CUDA_VISIBLE_DEVICES"]="3"
+
+os.environ["CUDA_VISIBLE_DEVICES"]="0,1,2,3"
 
 def get_parser():
 
@@ -48,7 +49,7 @@ def get_parser():
     parser.add_argument(
         '--save-interval',
         type=int,
-        default=10,
+        default=5,
         help='the interval for storing models (#iteration)')
     parser.add_argument(
         '--eval-interval',
@@ -139,6 +140,13 @@ def get_parser():
         type=float,
         default=0.0005,
         help='weight decay for optimizer')
+    parser.add_argument(
+        '--L1-weight-decay',
+        type=float,
+        default=0.0005,
+        help='weight decay for optimizer')
+    parser.add_argument(
+        '--use-L1', type=str2bool, default=False, help='use nesterov or not')
 
     return parser
 
@@ -216,12 +224,36 @@ class Processor():
 
     def load_optimizer(self):
         if self.arg.optimizer == 'SGD':
-            self.optimizer = optim.SGD(
-                self.model.parameters(),
-                lr=self.arg.base_lr,
-                momentum=0.9,
-                nesterov=self.arg.nesterov,
-                weight_decay=self.arg.weight_decay)
+            if self.arg.use_L1:
+                print ("use_L1")
+                parameter_dict = dict(self.model.named_parameters())  # Get parmeter of network in dictionary format wtih name being key
+                params = []
+                # Set different learning rate to bias layers and set their weight_decay to 0
+                for name, param in parameter_dict.items():
+                    if name.find('mask') > -1:
+                        print( name + 'layer parameters will be penelized by L1 regulization')
+                    else:
+                        lr = self.arg.base_lr
+                        weight_decay = self.arg.weight_decay
+                        if name.find('bias') > -1:
+                            print( name + 'layer parameters will be trained @ {}'.format(lr * 2))
+                            params += [{'params': [param], 'lr': lr * 2, 'weight_decay': 0}]
+                        else:
+                            print( name + 'layer parameters will be trained @ {}'.format(lr))
+                            params += [{'params': [param], 'lr': lr, 'weight_decay': weight_decay}]
+                self.optimizer = optim.SGD(
+                    params,
+                    lr=self.arg.base_lr,
+                    momentum=0.9,
+                    nesterov=self.arg.nesterov,
+                    weight_decay=self.arg.weight_decay)
+            else:
+                self.optimizer = optim.SGD(
+                    self.model.parameters(),
+                    lr=self.arg.base_lr,
+                    momentum=0.9,
+                    nesterov=self.arg.nesterov,
+                    weight_decay=self.arg.weight_decay)
             optimor = optim.SGD
         elif self.arg.optimizer == 'Adam':
             self.optimizer = optim.Adam(
@@ -290,8 +322,13 @@ class Processor():
             timer['dataloader'] += self.split_time()
 
             # forward
-            output = self.model(data)
+            output, mask = self.model(data)
             loss = self.loss(output, label)
+            if self.arg.use_L1:
+                mask = torch.cat(mask)
+                N_gpus = len(self.arg.device)
+                mask_L1_reg = mask.abs().sum() * self.arg.L1_weight_decay / N_gpus
+                loss += mask_L1_reg
 
             # backward
             self.optimizer.zero_grad()
@@ -341,7 +378,7 @@ class Processor():
                     label.long().cuda(self.output_device),
                     requires_grad=False,
                     volatile=True)
-                output = self.model(data)
+                output, mask = self.model(data)
                 loss = self.loss(output, label)
                 score_frag.append(output.data.cpu().numpy())
                 loss_value.append(loss.data[0])

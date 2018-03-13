@@ -13,7 +13,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.autograd import Variable
 
-os.environ["CUDA_VISIBLE_DEVICES"]="0,1,2,4"
+os.environ["CUDA_VISIBLE_DEVICES"]="0,1,2,3"
 
 def get_parser():
 
@@ -94,7 +94,7 @@ def get_parser():
         help='the arguments of model')
     parser.add_argument(
         '--weights',
-        default="./work_dir/NTU-RGB-D/xview/ST_GCN_relation_complete2graph_senet_mask/epoch40_model.pt",
+        default=None,
         help='the weights for network initialization')
     parser.add_argument(
         '--ignore-weights',
@@ -128,7 +128,7 @@ def get_parser():
     parser.add_argument(
         '--start-epoch',
         type=int,
-        default=40,
+        default=0,
         help='start training from which epoch')
     parser.add_argument(
         '--num-epoch',
