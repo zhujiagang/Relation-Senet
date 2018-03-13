@@ -1,0 +1,29 @@
+# feeder
+feeder: st_gcn_relation.feeder.Feeder
+test_feeder_args:
+  mode: test
+  window_size: 300
+  data_path: ../data/NTU-RGB-D/xview/val_data.npy
+  label_path: ../data/NTU-RGB-D/xview/val_label.pkl
+
+# model
+model: st_gcn_relation.net.ST_GCN_RELATION
+model_args:
+  num_class: 60
+  channel: 28
+  window_size: 300
+  num_point: 25
+  num_person: 2
+  graph: st_gcn_relation.graph.NTU_RGB_D
+  graph_args:
+    labeling_mode: 'spatialrelation'
+  mask_learning: True
+  use_data_bn: True 
+
+# test 
+phase: test
+device: 0
+test_batch_size: 16
+weights: ./work_dir/NTU-RGB-D/xview/ST_GCN_RELATION/epoch60_model.pt
+
+
